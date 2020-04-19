@@ -3,9 +3,11 @@
 This fork is a proof of concept for u/asyncio support. This works on Cython and Micropython.
 main.py shows how to use it. Basically AsyncLoopHandler is launched as a co-routine.
 To make it work :
-1) asyncio.sleep needed to be injected into the main loop (_processWaitEvents)
-2) the functions from AsyncLoopHandler down to the async alternative _processWaitEventsAsync needed to have async alternatives  
-3) the socket select function blocking sleep time needed to be minimised, and asyncio.sleep used instead 
+1) asyncio.sleep was injected into an async alternative of the main loop method (_processWaitEventsAsync)
+2) added async alternatives for the methods from AsyncLoopHandler down to _processWaitEventsAsync
+3) the socket select function blocking sleep time was minimised, as asyncio.sleep is used instead
+
+The async alternative and original methods may be able to be combined.
  
 ![New microWebSrv2](/img/microWebSrv2.png "microWebSrv2")
 
