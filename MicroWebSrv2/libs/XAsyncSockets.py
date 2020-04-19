@@ -17,6 +17,11 @@ except :
     def perf_counter() :
         return ticks_ms() / 1000
 
+try:
+    import uasyncio as asyncio
+except ImportError:
+    import asyncio
+
 # ============================================================================
 # ===( XAsyncSocketsPool )====================================================
 # ============================================================================
@@ -143,6 +148,47 @@ class XAsyncSocketsPool :
 
     # ------------------------------------------------------------------------
 
+    async def _processWaitEventsAsync(self) :
+        self._incThreadsCount()
+        timeSec = perf_counter()
+        while self._processing :
+            try :
+                try :
+                    rd, wr, ex = select( self._readList,
+                                         self._writeList,
+                                         self._readList,
+                                         0.001 )
+                except KeyboardInterrupt as ex :
+                    raise ex
+                except :
+                    continue
+                if not self._processing :
+                    break
+                for socketsList in ex, wr, rd :
+                    for socket in socketsList :
+                        asyncSocket = self._asyncSockets.get(id(socket), None)
+                        if asyncSocket and self._socketListAdd(socket, self._handlingList) :
+                            if socketsList is ex :
+                                asyncSocket.OnExceptionalCondition()
+                            elif socketsList is wr :
+                                asyncSocket.OnReadyForWriting()
+                            else :
+                                asyncSocket.OnReadyForReading()
+                            self._socketListRemove(socket, self._handlingList)
+                sec = perf_counter()
+                if sec > timeSec + self._CHECK_SEC_INTERVAL :
+                    timeSec = sec
+                    for asyncSocket in list(self._asyncSockets.values()) :
+                        if asyncSocket.ExpireTimeSec and \
+                            timeSec > asyncSocket.ExpireTimeSec :
+                            asyncSocket._close(XClosedReason.Timeout)
+                await asyncio.sleep(0.001)
+            except KeyboardInterrupt :
+                self._processing = False
+        self._decThreadsCount()
+
+    # ------------------------------------------------------------------------
+
     def AddAsyncSocket(self, asyncSocket) :
         try :
             socket = asyncSocket.GetSocketObj()
@@ -210,6 +256,14 @@ class XAsyncSocketsPool :
                 raise XAsyncSocketsPoolException('AsyncWaitEvents : Fatal error to create new threads...')
         else :
             self._processWaitEvents()
+
+    # ------------------------------------------------------------------------
+
+    async def AsyncWaitEventsAsync(self) :
+        if self._processing or self._threadsCount :
+            return
+        self._processing = True
+        await self._processWaitEventsAsync()
 
     # ------------------------------------------------------------------------
 

@@ -10,6 +10,11 @@ from os            import stat
 from sys           import implementation
 from _thread       import stack_size
 
+try:
+    import uasyncio as asyncio
+except ImportError:
+    import asyncio
+
 # ============================================================================
 # ===( MicroWebSrv2 )=========================================================
 # ============================================================================
@@ -196,6 +201,37 @@ class MicroWebSrv2 :
         self.Log('Server listening on %s:%s.' % self._bindAddr, MicroWebSrv2.INFO)
 
     # ------------------------------------------------------------------------
+
+    async def AsyncLoopHandler(self, procStackSize=0) :
+        parllProcCount=0
+        # if not isinstance(parllProcCount, int) or parllProcCount < 0 :
+        #     raise ValueError('"parllProcCount" must be a positive integer or zero.')
+        if not isinstance(procStackSize, int) or procStackSize < 0 :
+            raise ValueError('"procStackSize" must be a positive integer or zero.')
+        if self._xasSrv :
+            raise MicroWebSrv2Exception('Server is already running.')
+        if procStackSize == 0 and implementation.name == 'micropython' :
+            procStackSize = 8*1024
+        try :
+            saveStackSize = stack_size(procStackSize)
+        except Exception as ex :
+            raise ValueError('"procStackSize" of %s is not correct (%s).' % (procStackSize, ex))
+        self._xasPool = XAsyncSocketsPool()
+        try :
+            self.StartInPool(self._xasPool)
+            try :
+                self.Log('Starts the managed pool to wait for I/O events.', MicroWebSrv2.INFO)
+                await self._xasPool.AsyncWaitEventsAsync()
+            except Exception as e:
+                raise MicroWebSrv2Exception('Not enough memory to start %s parallel processes.' % parllProcCount)
+        except Exception as ex :
+            self.Stop()
+            raise ex
+        finally :
+            try :
+                stack_size(saveStackSize)
+            except :
+                pass
 
     def StartManaged(self, parllProcCount=1, procStackSize=0) :
         if not isinstance(parllProcCount, int) or parllProcCount < 0 :

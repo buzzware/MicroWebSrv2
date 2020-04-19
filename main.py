@@ -167,7 +167,19 @@ mws2.SetEmbeddedConfig()
 mws2.NotFoundURL = '/'
 
 # Starts the server as easily as possible in managed mode,
-mws2.StartManaged()
+#mws2.StartManaged()
+
+
+try:
+    import uasyncio as asyncio
+except ImportError:
+    import asyncio
+
+
+loop = asyncio.get_event_loop()
+loop.create_task(mws2.AsyncLoopHandler())
+loop.run_forever()
+loop.close()
 
 # Main program loop until keyboard interrupt,
 try :
